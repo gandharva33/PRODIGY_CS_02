@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PixelCrypt Mini</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2rem; background: #f4f4f4; }
+    canvas { max-width: 100%; border: 1px solid #ccc; margin: 8px 4px; }
+    button { padding: 8px 16px; margin: 4px; cursor: pointer; font-size: 0.9rem; }
+    input[type=number] { padding: 7px; width: 100px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h2>🔐 PixelCrypt</h2>
+  <input type="file" accept="image/*" onchange="load(event)"> &nbsp;
+  Key: <input type="number" id="key" value="42" min="1" max="999999"> &nbsp;
+  <button id="btn" onclick="run()">🔒 Encrypt</button>
+  <button onclick="save()">💾 Save</button>
+  <br>
+  <canvas id="a"></canvas>
+  <canvas id="b"></canvas>
+<script>
+  var a = document.getElementById('a'), b = document.getElementById('b');
+  var ax = a.getContext('2d'),          bx = b.getContext('2d');
+  var original, encrypted, isEncrypted = false;
+
+  function load(e) {
+    var img = new Image(), url = URL.createObjectURL(e.target.files[0]);
+    img.onload = function() {
+      a.width = b.width = img.width; a.height = b.height = img.height;
+      ax.drawImage(img, 0, 0);
+      original = ax.getImageData(0, 0, img.width, img.height);
+      encrypted = null; isEncrypted = false;
+      document.getElementById('btn').textContent = '🔒 Encrypt';
+      bx.clearRect(0, 0, b.width, b.height);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }
+
+  function xorPixels(data) {
+    var key = parseInt(document.getElementById('key').value) || 42;
+    var out = new Uint8ClampedArray(data), s = (key * 9973) % 2147483647;
+    for (var i = 0; i < out.length; i += 4) {
+      s = (s * 16807) % 2147483647;
+      var pk = Math.floor((s - 1) / 2147483646 * 256), px = i / 4;
+      out[i]   ^= (key ^ pk ^ (px % 251))              & 0xFF;
+      out[i+1] ^= ((key >> 3) ^ pk ^ ((px * 3) % 251)) & 0xFF;
+      out[i+2] ^= ((key >> 5) ^ pk ^ ((px * 7) % 251)) & 0xFF;
+    }
+    return out;
+  }
+
+  function run() {
+    if (!original) return alert('Load an image first!');
+    if (!isEncrypted) {
+      encrypted = new ImageData(xorPixels(original.data), original.width, original.height);
+      bx.putImageData(encrypted, 0, 0);
+      isEncrypted = true;
+      document.getElementById('btn').textContent = '🔓 Decrypt';
+    } else {
+      bx.putImageData(new ImageData(xorPixels(encrypted.data), original.width, original.height), 0, 0);
+      isEncrypted = false;
+      document.getElementById('btn').textContent = '🔒 Encrypt';
+    }
+  }
+
+  function save() {
+    var link = document.createElement('a');
+    link.download = 'output.png'; link.href = b.toDataURL(); link.click();
+  }
+</script>
+</body>
+</html>
