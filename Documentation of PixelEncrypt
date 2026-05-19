@@ -1,0 +1,230 @@
+# PixelCrypt - Image Encryption Tool Documentation
+
+---
+
+## What is PixelCrypt?
+
+Imagine you have a secret photo you don't want anyone else to see. Instead of locking it in a safe, what if you could **scramble the colors** of every pixel so the image looks like random noise? And only someone with the **exact same secret key** can unscramble it back to the original?
+
+That's exactly what PixelCrypt does!
+
+**Real Example:**
+- Original image: A photo of a cat 🐱
+- Key: `42`
+- Encrypted image: Random colorful noise 🌈 (unrecognizable)
+- Decrypt with the same key `42` → You get your cat photo back! 🐱
+
+**Why?**
+Every image is made of pixels. Every pixel has 3 color values:
+- **R** (Red): 0–255
+- **G** (Green): 0–255
+- **B** (Blue): 0–255
+
+PixelCrypt scrambles these numbers using your key, so the image becomes unreadable. Use the same key again and the math reverses itself perfectly.
+
+---
+
+## What We Need to Build
+
+A program that:
+1. Loads an image from the user's device
+2. Takes a numeric key (like `42`)
+3. Can **encrypt** (scramble) the image pixels
+4. Can **decrypt** (unscramble) the pixels back using the same key
+5. Lets the user save the result
+
+---
+
+## Step 2: Break the Problem into Small Sub-Tasks
+
+Let's think about what we need to do, piece by piece:
+
+### Sub-Task 1: Load the Image
+- Ask the user to pick an image file
+- Draw it onto a canvas so we can read its pixel data
+- Store the original pixel data for reference
+
+### Sub-Task 2: Generate a Key Stream
+- Take the numeric key entered by the user
+- Use it to seed a pseudo-random number generator (LCG)
+- Produce a unique scramble value for every single pixel
+
+### Sub-Task 3: XOR Each Pixel's Colors
+- Go through every pixel one by one
+- Apply the scramble value to R, G, and B channels using XOR
+- XOR is special: applying it twice gives back the original value
+
+### Sub-Task 4: Handle the "Wrap Around" Problem
+- Color values must stay between 0 and 255
+- XOR with `& 0xFF` ensures the result never goes out of range
+- No manual wrap-around needed — XOR handles it naturally
+
+### Sub-Task 5: Create the Encrypt Function
+- Take the original pixel data and the key
+- Return a new scrambled pixel array
+
+### Sub-Task 6: Create the Decrypt Function
+- It's the **exact same function** as encryption!
+- XOR is its own inverse: `A XOR B XOR B = A`
+- Applying the same key stream again restores the original
+
+### Sub-Task 7: Display and Save Results
+- Show the original image on the left canvas
+- Show the encrypted/decrypted result on the right canvas
+- Allow the user to download the output as a PNG
+
+---
+
+## Step 3: Writing the Actual Code
+
+**In the `index.html` file:**
+
+### The Seed Generator (Key Stream)
+
+```javascript
+var s = (key * 9973) % 2147483647;
+```
+
+This creates a starting seed from your key. Multiplying by `9973` (a prime number) spreads the seed across a large range so similar keys produce very different results.
+
+---
+
+### The XOR Pixel Scrambler
+
+```javascript
+function xorPixels(data) {
+  var key = parseInt(document.getElementById('key').value) || 42;
+  var out = new Uint8ClampedArray(data), s = (key * 9973) % 2147483647;
+  for (var i = 0; i < out.length; i += 4) {
+    s = (s * 16807) % 2147483647;
+    var pk = Math.floor((s - 1) / 2147483646 * 256), px = i / 4;
+    out[i]   ^= (key ^ pk ^ (px % 251))              & 0xFF;
+    out[i+1] ^= ((key >> 3) ^ pk ^ ((px * 3) % 251)) & 0xFF;
+    out[i+2] ^= ((key >> 5) ^ pk ^ ((px * 7) % 251)) & 0xFF;
+  }
+  return out;
+}
+```
+
+This goes through every pixel (`i += 4` because each pixel has R, G, B, Alpha), generates a new pseudo-random value `pk`, and XORs each color channel with a unique combination of the key and `pk`.
+
+---
+
+### The Encrypt / Decrypt Toggle
+
+```javascript
+function run() {
+  if (!isEncrypted) {
+    encrypted = new ImageData(xorPixels(original.data), original.width, original.height);
+    bx.putImageData(encrypted, 0, 0);
+    isEncrypted = true;
+  } else {
+    bx.putImageData(new ImageData(xorPixels(encrypted.data), ...), 0, 0);
+    isEncrypted = false;
+  }
+}
+```
+
+The same `xorPixels()` function is used for both encryption and decryption. When encrypting, it scrambles `original.data`. When decrypting, it unscrambles `encrypted.data` — same function, same key, opposite effect.
+
+---
+
+## Step 4: Explain What the Output Means and Why It Is Correct
+
+### Understanding the Output
+
+When we run the program with:
+- **Image:** A photo of a cat
+- **Key:** `42`
+- **Action:** Encrypt
+
+**Output:** The right canvas shows colorful random noise — the cat is completely hidden.
+
+---
+
+### Why Is This Correct?
+
+Let's verify with a single pixel example:
+
+Suppose a pixel has these original values:
+```
+R = 200,  G = 100,  B = 50
+```
+
+With key `42`, suppose the generator produces `pk = 173` for this pixel:
+
+```
+Encrypted R = 200 XOR (42 ^ 173 ^ 0)   = some value 0–255
+Encrypted G = 100 XOR (5  ^ 173 ^ 3)   = some value 0–255
+Encrypted B =  50 XOR (1  ^ 173 ^ 7)   = some value 0–255
+```
+
+Now decrypt by running the **same function** on the encrypted values with the same key. Since `A XOR B XOR B = A`:
+
+```
+Decrypted R = Encrypted R XOR (same scramble) = 200 ✓
+Decrypted G = Encrypted G XOR (same scramble) = 100 ✓
+Decrypted B = Encrypted B XOR (same scramble) =  50 ✓
+```
+
+We get the original pixel back perfectly!
+
+---
+
+### Testing Decryption
+
+| Step | Action | Result |
+|------|--------|--------|
+| Load image | Read pixel data | Original stored |
+| Encrypt (key=42) | XOR all pixels | Image looks like noise |
+| Decrypt (key=42) | XOR all pixels again | Original image restored ✓ |
+| Decrypt (key=99) | XOR with wrong key | Garbled output ✗ |
+
+---
+
+### Why the Code Works
+
+**1. XOR (^) Operation:**
+- XOR scrambles bits in a reversible way
+- `A XOR B = C` and `C XOR B = A`
+- This means the same function both encrypts and decrypts
+
+**2. LCG (Linear Congruential Generator):**
+- Produces a long sequence of pseudo-random numbers from the seed
+- The same key always produces the same sequence
+- This is why decryption with the correct key always works
+
+**3. `& 0xFF` Masking:**
+- Keeps all color values within the valid 0–255 range
+- Prevents any overflow or color corruption
+
+**4. Three Different Channel Formulas:**
+- R, G, and B each use slightly different math (`key`, `key>>3`, `key>>5`)
+- This means each color channel is scrambled differently
+- Makes the encryption harder to visually analyze
+
+---
+
+### Complete Example Session
+
+```
+========================================
+   PIXELCRYPT - IMAGE ENCRYPTION TOOL
+========================================
+Step 1 → Load image:     cat.png selected ✓
+Step 2 → Enter key:      42
+Step 3 → Click Encrypt:  Right canvas shows noise 🌈
+
+         Left Canvas          Right Canvas
+         [ 🐱 Cat Photo ]  →  [ 🌈 Random Noise ]
+
+Step 4 → Click Decrypt:  Right canvas shows cat again 🐱
+
+         Left Canvas          Right Canvas
+         [ 🐱 Cat Photo ]  →  [ 🐱 Cat Photo ] ✓
+
+Step 5 → Click 💾 Save:  output.png downloaded
+========================================
+```
+
+> ⚠️ **Remember:** If you encrypt with key `42`, you must decrypt with key `42`. Any other key will produce a different scramble and you will NOT get your original image back.
