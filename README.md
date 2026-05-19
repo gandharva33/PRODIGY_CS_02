@@ -24,7 +24,7 @@ No build step required. Just open the file in a browser.
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-username/pixelcrypt.git
+git clone https://github.com/gandharva33/pixelcrypt.git
 cd pixelcrypt
 
 # Open directly in your browser
